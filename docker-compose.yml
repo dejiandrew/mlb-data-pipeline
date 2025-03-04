@@ -45,11 +45,15 @@ services:
       - ./logs:/opt/airflow/logs
       - ./data:/opt/airflow/data
       - ./.env:/opt/airflow/.env
+      - ./gcp-key.json:/opt/airflow/gcp-key.json
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/gcp-key.json
+      - PYTHONUSERBASE=/home/airflow/.local
+      - PATH=/home/airflow/.local/bin:$PATH
     command: webserver
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
@@ -70,10 +74,14 @@ services:
       - ./logs:/opt/airflow/logs
       - ./data:/opt/airflow/data
       - ./.env:/opt/airflow/.env
+      - ./gcp-key.json:/opt/airflow/gcp-key.json
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/gcp-key.json
+      - PYTHONUSERBASE=/home/airflow/.local
+      - PATH=/home/airflow/.local/bin:$PATH
     command: scheduler
     healthcheck:
       test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\""]
@@ -93,3 +101,5 @@ services:
 
 volumes:
   postgres_data:
+
+  

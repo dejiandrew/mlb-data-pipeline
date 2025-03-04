@@ -4,10 +4,10 @@ mlb_pipeline:
   outputs:
     dev:
       type: bigquery
-      method: oauth
-      project: your-gcp-project
-      dataset: mlb_data
+      method: service-account
+      project: mlb-pipeline-deji
+      dataset: staging
       threads: 4
-      timeout_seconds: 300
-      location: US
-      priority: interactive
+      keyfile: /usr/app/gcp-key.json
+
+

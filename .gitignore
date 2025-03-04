@@ -8,3 +8,10 @@ dbt/target/
 dbt/dbt_packages/
 dbt/logs/
 *.sh
+google-cloud-sdk/
+terraform-key.json
+gcp-key.json
+*.terraform
+*.terraform.lock.hcl
+*terraform.tfstate
+*terraform.tfstate.backup
