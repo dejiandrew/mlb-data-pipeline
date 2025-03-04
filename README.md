@@ -24,6 +24,7 @@ This project follows modern data engineering architecture as illustrated in the 
 - **Visualization**: Looker Studio
 
 ## Project Structure
+```
 mlb-data-pipeline/
 ├── README.md
 ├── deploy.sh
@@ -75,6 +76,7 @@ mlb-data-pipeline/
 │   └── team_metadata.csv
 └── tests/
 └── assert_positive_runs.sql
+```
 
 ## Setup Instructions
 
@@ -105,24 +107,3 @@ pip install -r requirements.txt
 # Start local services
 docker-compose up -d
 
-# Authenticate with GCP
-gcloud auth login
-
-# Set your project
-gcloud config set project your-gcp-project-id
-
-# Enable required APIs
-gcloud services enable compute.googleapis.com
-gcloud services enable storage-api.googleapis.com
-gcloud services enable bigquery.googleapis.com
-gcloud services enable composer.googleapis.com
-gcloud services enable monitoring.googleapis.com
-
-# Navigate to terraform directory
-cd terraform
-
-# Initialize terraform
-terraform init
-
-# Apply the configuration
-terraform apply -var="project_id=your-gcp-project-id"
