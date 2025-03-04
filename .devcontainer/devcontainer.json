@@ -23,9 +23,7 @@
       }
     }
   },
-  "forwardPorts": [
-    8080
-  ],
+  "forwardPorts": [8080],
   "initializeCommand": "mkdir -p ${containerWorkspaceFolder}/.vscode || true",
   "onCreateCommand": "echo 'Installing Python dependencies...' && pip install -r requirements.txt || echo 'Python dependencies installation failed, but continuing setup'",
   "postCreateCommand": "curl -sSL https://sdk.cloud.google.com | bash && echo 'source /home/vscode/google-cloud-sdk/path.bash.inc' >> ~/.bashrc",
