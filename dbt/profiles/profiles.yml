@@ -1,0 +1,13 @@
+# dbt/profiles/profiles.yml
+mlb_pipeline:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      project: your-gcp-project
+      dataset: mlb_data
+      threads: 4
+      timeout_seconds: 300
+      location: US
+      priority: interactive
