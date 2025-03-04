@@ -11,6 +11,7 @@ dbt/logs/
 google-cloud-sdk/
 terraform-key.json
 gcp-key.json
+gcp-key-old.json
 *.terraform
 *.terraform.lock.hcl
 *terraform.tfstate

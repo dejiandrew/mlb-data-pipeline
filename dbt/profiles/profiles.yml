@@ -8,6 +8,6 @@ mlb_pipeline:
       project: mlb-pipeline-deji
       dataset: staging
       threads: 4
-      keyfile: /usr/app/gcp-key.json
+      keyfile: /root/.dbt/gcp-key.json
 
 

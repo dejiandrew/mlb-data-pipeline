@@ -96,6 +96,8 @@ services:
     volumes:
       - ./dbt:/usr/app/dbt
       - ./.env:/usr/app/.env
+      - ./dbt/profiles:/root/.dbt
+      - ./gcp-key.json:/root/.dbt/gcp-key.json
     depends_on:
       - airflow-webserver
 
