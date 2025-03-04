@@ -164,3 +164,27 @@ cd dbt/mlb_transformations
 dbt run
 dbt test
 ```
+
+## Dashboards
+The project includes two main Looker Studio dashboards:
+1. **Team Performance Dashboard** - Track team wins, losses, and performance metrics over time
+2. **Game Statistics Dashboard** - Visualize individual game statistics and trends
+
+To access the dashboards, visit the Looker Studio links (available after deployment).
+
+## Monitoring
+The pipeline includes monitoring and alerting:
+* Cloud Monitoring dashboards for pipeline health
+* Alerts for DAG failures and data quality issues
+* Resource utilization tracking
+
+## Future Improvements
+* Add real-time streaming for live game updates
+* Implement machine learning for game predictions
+* Expand dashboard capabilities with more advanced metrics
+* Add CI/CD pipeline for automated testing and deployment
+
+## Contact
+Deji Andrew
+
+Project Link: https://github.com/dejiandrew/mlb-data-pipeline
