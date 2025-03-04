@@ -94,7 +94,7 @@ This project uses GitHub Codespaces for development to provide a consistent envi
 
 ### Local Development Alternative
 If you prefer local development:
-```bash```
+```
 # Clone the repository
 git clone https://github.com/yourusername/mlb-data-pipeline.git
 cd mlb-data-pipeline
@@ -106,4 +106,61 @@ pip install -r requirements.txt
 
 # Start local services
 docker-compose up -d
+```
 
+### GCP Setup
+```
+# Authenticate with GCP
+gcloud auth login
+
+# Set your project
+gcloud config set project your-gcp-project-id
+
+# Enable required APIs
+gcloud services enable compute.googleapis.com
+gcloud services enable storage-api.googleapis.com
+gcloud services enable bigquery.googleapis.com
+gcloud services enable composer.googleapis.com
+gcloud services enable monitoring.googleapis.com
+```
+
+### Infrastructure Development
+```
+# Navigate to terraform directory
+cd terraform
+
+# Initialize terraform
+terraform init
+
+# Apply the configuration
+terraform apply -var="project_id=your-gcp-project-id"
+```
+
+## Running the Pipeline
+
+### Data Ingestion
+```
+# Run the scrapers manually
+cd scrapers
+python mlb_scraper.py
+python boxscore_client.py
+python game_stats_client.py
+
+# Or let Airflow handle it based on schedule
+```
+
+### Airflow
+```
+# Access Airflow UI
+# If using Cloud Composer, access through GCP Console
+# If using local Airflow:
+open http://localhost:8080
+```
+
+### dbt Transformations
+```
+# Run dbt models
+cd dbt/mlb_transformations
+dbt run
+dbt test
+```
