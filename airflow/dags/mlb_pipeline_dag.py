@@ -19,7 +19,10 @@ from mlb_pipeline.pipeline import (
     embed_and_insert,
     test_query,
     rag_pipeline,
-    generate_podcast_script
+    generate_podcast_script,
+    format_script_for_tts,
+    generate_audio_with_your_voice,
+    upload_podcast_to_gcs
 )
 
 default_args = {
@@ -87,11 +90,108 @@ with DAG(
         query = "Generate a podcast script about MLB power rankings before opening day."
         script = generate_podcast_script(query)
         kwargs['ti'].log.info(f"Generated Podcast Script:\n{script}")
+        kwargs['ti'].xcom_push(key="podcast_script", value=script)
+        return script
 
     generate_script = PythonOperator(
         task_id="generate_podcast_script",
         python_callable=generate_script_task,
         provide_context=True,
     )
+    
+    def generate_audio_task(**kwargs):
+        # Get the script from XCom
+        script = kwargs['ti'].xcom_pull(key="podcast_script", task_ids="generate_podcast_script")
+        
+        # Optimize the script for TTS
+        optimized_script = format_script_for_tts(script)
+        
+        # Log the differences for debugging
+        kwargs['ti'].log.info("Original script length: %d", len(script))
+        kwargs['ti'].log.info("Optimized script length: %d", len(optimized_script))
+        
+        # Create output directory if it doesn't exist
+        output_dir = "/opt/airflow/podcast_output"
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = f"{output_dir}/podcast_{timestamp}.mp3"
+        
+        # Save the optimized script for reference
+        script_file = f"{output_dir}/script_{timestamp}.txt"
+        with open(script_file, 'w') as f:
+            f.write(optimized_script)
+        
+        # Generate the audio with the optimized script
+        result = generate_audio_with_your_voice(optimized_script, output_file)
+        
+        if result:
+            kwargs['ti'].log.info(f"Successfully generated audio at: {result}")
+            kwargs['ti'].log.info(f"Script saved at: {script_file}")
+            return result
+        else:
+            kwargs['ti'].log.error("Failed to generate audio")
+            return None
 
-    scrape_and_store_task >> embed_update_task >> rag_query_task >> generate_script
+    generate_audio = PythonOperator(
+        task_id="generate_audio",
+        python_callable=generate_audio_task,
+        provide_context=True,
+    )
+
+    def upload_podcast_files_to_gcs(**kwargs):
+        """Upload generated podcast files to GCS"""
+        audio_file = kwargs['ti'].xcom_pull(task_ids='generate_audio')
+        if not audio_file or not os.path.exists(audio_file):
+            kwargs['ti'].log.error("Audio file not found")
+            return None
+        
+        # Derive script file path from audio file path
+        # The script is in the same directory as the audio file
+        directory = os.path.dirname(audio_file)
+        base_filename = os.path.basename(audio_file).replace('podcast_', 'script_').replace('.mp3', '.txt')
+        script_file = os.path.join(directory, base_filename)
+        
+        # Log the paths to verify
+        kwargs['ti'].log.info(f"Audio file path: {audio_file}")
+        kwargs['ti'].log.info(f"Script file path: {script_file}")
+        
+        # Check if script file exists
+        if not os.path.exists(script_file):
+            kwargs['ti'].log.error(f"Script file not found: {script_file}")
+            # Continue with audio upload only
+            bucket_name = os.getenv("GCS_BUCKET_NAME")
+            timestamp = datetime.now().strftime("%Y%m%d")
+            audio_blob = f"podcasts/audio/{timestamp}/{os.path.basename(audio_file)}"
+            audio_gcs_path = upload_podcast_to_gcs(audio_file, bucket_name, audio_blob)
+            kwargs['ti'].log.info(f"Uploaded podcast audio to: {audio_gcs_path}")
+            return {"audio_gcs_path": audio_gcs_path}
+        
+        # Upload both files to GCS
+        bucket_name = os.getenv("GCS_BUCKET_NAME")
+        timestamp = datetime.now().strftime("%Y%m%d")
+        
+        audio_blob = f"podcasts/audio/{timestamp}/{os.path.basename(audio_file)}"
+        script_blob = f"podcasts/scripts/{timestamp}/{os.path.basename(script_file)}"
+        
+        audio_gcs_path = upload_podcast_to_gcs(audio_file, bucket_name, audio_blob)
+        script_gcs_path = upload_podcast_to_gcs(script_file, bucket_name, script_blob)
+        
+        kwargs['ti'].log.info(f"Uploaded podcast audio to: {audio_gcs_path}")
+        kwargs['ti'].log.info(f"Uploaded podcast script to: {script_gcs_path}")
+        
+        return {
+            "audio_gcs_path": audio_gcs_path,
+            "script_gcs_path": script_gcs_path
+        }
+
+    upload_to_gcs_task = PythonOperator(
+        task_id="upload_podcast_to_gcs",
+        python_callable=upload_podcast_files_to_gcs,
+        provide_context=True,
+    )
+    
+    # Set task dependencies
+    scrape_and_store_task >> embed_update_task >> rag_query_task >> generate_script >> generate_audio >> upload_to_gcs_task

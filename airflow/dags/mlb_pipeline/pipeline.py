@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import re
 from datetime import datetime
 
 import requests
@@ -150,18 +151,24 @@ def generate_podcast_script(query_str: str) -> str:
     if not docs:
         return "No relevant documents found."
     
-    # Combine the retrieved docs into context. You may need to trim or summarize if too large.
+    # Combine the retrieved docs into context
     context_text = "\n\n".join(docs)
     
-    # Build a detailed prompt for generating a podcast script.
+    # Build a detailed prompt for generating a podcast script
     prompt = (
-        "You are an experienced MLB podcast host. Your job is to generate a full podcast script "
-        "based on the following context. The script should have a compelling introduction, a discussion "
-        "of key points (including relevant statistics, team performance, and notable players), and a concise conclusion. "
-        "Make the script engaging and conversational.\n\n"
+        "You are an experienced MLB podcast host. Generate a natural, conversational podcast script "
+        "about the following baseball information.\n\n"
+        "Important guidelines:\n"
+        "1. Write this as a fluid monologue without any 'Host:' prefixes\n"
+        "2. Don't include any section headings like [INTRO] or [CONCLUSION]\n"
+        "3. Create natural transitions between topics instead of labeling sections\n"
+        "4. Make it sound like you're having a casual conversation with the listener\n"
+        "5. Include your enthusiasm for baseball but keep it professional\n"
+        "6. Begin with a brief greeting and introduction to the topic\n"
+        "7. End with a sign-off that teases future content\n\n"
         "Context:\n"
         f"{context_text}\n\n"
-        "Based on this context, generate a complete podcast script."
+        "Based on this context, generate a complete, natural-sounding podcast script."
     )
     
     # Prepare the message payload for ChatCompletion
@@ -170,7 +177,7 @@ def generate_podcast_script(query_str: str) -> str:
             "role": "system",
             "content": (
                 "You are an experienced MLB podcast host who produces engaging and informative podcast episodes. "
-                "Follow the instructions in the user's message to generate a detailed script."
+                "Create natural, flowing monologues without any speaker labels or section headings."
             )
         },
         {
@@ -187,11 +194,109 @@ def generate_podcast_script(query_str: str) -> str:
     openai_client = OpenAI(api_key=openai_api_key)
     
     response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",  # or 'gpt-4' if available
+        model="gpt-3.5-turbo",
         messages=messages,
         temperature=0.7,
-        max_tokens=1500  # Increase this if you want a longer script
+        max_tokens=1500
     )
     
     podcast_script = response.choices[0].message.content.strip()
     return podcast_script
+
+def format_script_for_tts(script):
+    """Format a script for better text-to-speech results"""
+    # Remove any remaining section headers or speaker indicators
+    formatted = re.sub(r'\[(.*?)\]', '', script)
+    formatted = re.sub(r'Host:', '', formatted)
+    
+    # Replace common baseball abbreviations and terms
+    replacements = {
+        "MLB": "M L B",
+        "HR": "home run",
+        "RBI": "R B I",
+        "ERA": "E R A",
+        "AL": "A L",
+        "NL": "N L",
+        "vs.": "versus",
+        "vs": "versus",
+        "Phillies": "Fillies",  # Help with pronunciation
+    }
+    
+    for term, replacement in replacements.items():
+        formatted = formatted.replace(f" {term} ", f" {replacement} ")
+        # Also catch terms at the beginning of sentences
+        formatted = formatted.replace(f"{term} ", f"{replacement} ")
+    
+    # Match ordinal numbers (1st, 2nd, 3rd, etc.)
+    formatted = re.sub(r'(\d+)(st|nd|rd|th)', r'\1 \2', formatted)
+    
+    # Add subtle pauses after sentences using actual pauses instead of [break]
+    formatted = formatted.replace(". ", ". ... ")
+    formatted = formatted.replace("! ", "! ... ")
+    formatted = formatted.replace("? ", "? ... ")
+    
+    # Handle paragraph breaks with pauses
+    formatted = formatted.replace("\n\n", "\n...\n")
+    
+    return formatted
+
+def generate_audio_with_your_voice(script_text, output_file="podcast_output.mp3"):
+    """Generate audio using your cloned voice on ElevenLabs"""
+    voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+    api_key = os.getenv("ELEVENLABS_API_KEY")
+    
+    if not voice_id or not api_key:
+        raise ValueError("Missing ELEVENLABS_VOICE_ID or ELEVENLABS_API_KEY in environment variables")
+    
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    
+    headers = {
+        "xi-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+    
+    # Adjust these settings for a more natural sound
+    data = {
+        "text": script_text,
+        "model_id": "eleven_monolingual_v1",
+        "voice_settings": {
+            "stability": 0.6,           # Increased slightly for more consistency
+            "similarity_boost": 0.8,     # Increased to sound more like your voice
+            "style": 0.25,              # Add a bit of style variation
+            "use_speaker_boost": True
+        }
+    }
+    
+    print(f"Generating audio for script ({len(script_text)} characters)...")
+    response = requests.post(url, json=data, headers=headers)
+    
+    if response.status_code == 200:
+        with open(output_file, 'wb') as f:
+            f.write(response.content)
+        print(f"Audio generated successfully: {output_file}")
+        return output_file
+    else:
+        print(f"Error generating audio: {response.status_code}")
+        print(response.text)
+        return None
+
+def upload_podcast_to_gcs(file_path, bucket_name, blob_name=None):
+    """Upload podcast audio or script file to GCS"""
+    if not blob_name:
+        # If no blob name provided, use the filename with a logical path
+        file_type = "audio" if file_path.endswith(".mp3") else "scripts"
+        filename = os.path.basename(file_path)
+        blob_name = f"podcasts/{file_type}/{filename}"
+    
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    
+    # Detect content type based on file extension
+    content_type = "audio/mpeg" if file_path.endswith(".mp3") else "text/plain"
+    
+    # Upload file
+    blob.upload_from_filename(file_path, content_type=content_type)
+    print(f"Uploaded {file_path} to gs://{bucket_name}/{blob_name}")
+    
+    return f"gs://{bucket_name}/{blob_name}"
