@@ -1,0 +1,17 @@
+FROM apache/airflow:2.8.1-python3.10
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+# Switch to airflow user to install pip packages
+USER airflow
+RUN pip install --no-cache-dir \
+    sentence-transformers \
+    chromadb \
+    python-dotenv \
+    openai
+
+# (Optional) Switch back to root if needed for later steps
+# USER root

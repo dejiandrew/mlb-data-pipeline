@@ -2,6 +2,12 @@ from datetime import datetime, timedelta
 import os
 import time
 
+from dotenv import load_dotenv
+
+# Explicitly specify the path if needed
+#load_dotenv("/opt/airflow/.env")
+load_dotenv()
+
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 
