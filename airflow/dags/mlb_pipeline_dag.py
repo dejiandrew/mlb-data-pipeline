@@ -1,38 +1,79 @@
-# dags/mlb_pipeline_dag.py
 from datetime import datetime, timedelta
+import os
+import time
+
 from airflow import DAG
-from airflow.operators.bash import BashOperator
-from airflow.operators.python import PythonOperator
+from airflow.operators.python_operator import PythonOperator
+
+# Import functions from your module
+from mlb_pipeline.pipeline import (
+    scrape_article,
+    store_in_gcs,
+    get_chroma_collection,
+    embed_and_insert,
+    test_query,
+    rag_pipeline
+)
 
 default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'email_on_failure': False,
-    'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    "owner": "airflow",
+    "start_date": datetime(2025, 3, 15),
+    "retries": 1,
+    "retry_delay": timedelta(minutes=5),
 }
 
 with DAG(
-    'mlb_data_pipeline',
+    "mlb_pipeline_dag",
     default_args=default_args,
-    description='MLB Data Pipeline',
+    description="Orchestrates the MLB podcast automation pipeline",
     schedule_interval=timedelta(days=1),
-    start_date=datetime(2023, 1, 1),
     catchup=False,
 ) as dag:
 
-    # Task to extract data
-    extract_data = BashOperator(
-        task_id='extract_data',
-        bash_command='echo "Extracting MLB data" && sleep 5',
+    def scrape_and_store(**kwargs):
+        article_urls = [
+            "https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
+            # Add more URLs as needed
+        ]
+        scraped_data = []
+        for url in article_urls:
+            kwargs["ti"].log.info(f"Scraping: {url}")
+            try:
+                article = scrape_article(url)
+                scraped_data.append(article)
+                time.sleep(2)
+            except Exception as e:
+                kwargs["ti"].log.error(f"Error scraping {url}: {e}")
+        blob_name = f"articles/{datetime.now().strftime('%Y-%m-%d')}/articles_batch.json"
+        store_in_gcs(scraped_data, os.getenv("GCS_BUCKET_NAME"), blob_name)
+        kwargs["ti"].xcom_push(key="scraped_data", value=scraped_data)
+
+    scrape_and_store_task = PythonOperator(
+        task_id="scrape_and_store",
+        python_callable=scrape_and_store,
+        provide_context=True,
     )
 
-    # Task to run dbt
-    run_dbt = BashOperator(
-        task_id='run_dbt',
-        bash_command='echo "Running dbt models" && sleep 5',
+    def embed_update_vector_db(**kwargs):
+        scraped_data = kwargs["ti"].xcom_pull(key="scraped_data", task_ids="scrape_and_store")
+        collection = get_chroma_collection()
+        embed_and_insert(scraped_data, collection)
+
+    embed_update_task = PythonOperator(
+        task_id="embed_update_vector_db",
+        python_callable=embed_update_vector_db,
+        provide_context=True,
     )
 
-    # Define task dependencies
-    extract_data >> run_dbt
+    def run_rag_demo(**kwargs):
+        query_str = "Who is the 2nd team in MLB's power rankings?"
+        answer = rag_pipeline(query_str)
+        kwargs["ti"].log.info(f"Final Answer: {answer}")
+
+    rag_query_task = PythonOperator(
+        task_id="rag_query_demo",
+        python_callable=run_rag_demo,
+        provide_context=True,
+    )
+
+    scrape_and_store_task >> embed_update_task >> rag_query_task
