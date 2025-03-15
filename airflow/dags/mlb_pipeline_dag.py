@@ -18,7 +18,8 @@ from mlb_pipeline.pipeline import (
     get_chroma_collection,
     embed_and_insert,
     test_query,
-    rag_pipeline
+    rag_pipeline,
+    generate_podcast_script
 )
 
 default_args = {
@@ -82,4 +83,15 @@ with DAG(
         provide_context=True,
     )
 
-    scrape_and_store_task >> embed_update_task >> rag_query_task
+    def generate_script_task(**kwargs):
+        query = "Generate a podcast script about MLB power rankings before opening day."
+        script = generate_podcast_script(query)
+        kwargs['ti'].log.info(f"Generated Podcast Script:\n{script}")
+
+    generate_script = PythonOperator(
+        task_id="generate_podcast_script",
+        python_callable=generate_script_task,
+        provide_context=True,
+    )
+
+    scrape_and_store_task >> embed_update_task >> rag_query_task >> generate_script
