@@ -42,7 +42,8 @@ with DAG(
 
     def scrape_and_store(**kwargs):
         article_urls = [
-            "https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
+            #"https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
+            "https://www.mlb.com/news/spencer-strider-makes-first-2025-spring-training-start-after-surgery"
             # Add more URLs as needed
         ]
         scraped_data = []
@@ -87,7 +88,7 @@ with DAG(
     )
 
     def generate_script_task(**kwargs):
-        query = "Generate a podcast script about MLB power rankings before opening day."
+        query = "Generate a podcast script about the Spencer Strider's first start back from surgery."
         script = generate_podcast_script(query)
         kwargs['ti'].log.info(f"Generated Podcast Script:\n{script}")
         kwargs['ti'].xcom_push(key="podcast_script", value=script)
