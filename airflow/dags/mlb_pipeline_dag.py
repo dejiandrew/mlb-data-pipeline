@@ -41,6 +41,7 @@ with DAG(
 ) as dag:
 
     def fetch_daily_article_urls(**kwargs):
+        import feedparser
         feed = feedparser.parse("https://www.mlb.com/feeds/news/rss.xml")
         urls = []
 
