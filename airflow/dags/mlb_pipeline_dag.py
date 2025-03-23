@@ -42,9 +42,22 @@ with DAG(
 
     def fetch_daily_article_urls(**kwargs):
         import feedparser
+        from datetime import datetime
+
         feed = feedparser.parse("https://www.mlb.com/feeds/news/rss.xml")
-        urls = [entry.link for entry in feed.entries[:3]]  # or filter by keyword/date
+
+        today_str = datetime.utcnow().strftime("%a, %d %b %Y")  # e.g., "Sun, 23 Mar 2025"
+        urls = [
+            entry.link for entry in feed.entries
+            if entry.published.startswith(today_str)
+        ]
+
+        # Fallback: if no articles match today’s date, just take the top 3
+        if not urls:
+            urls = [entry.link for entry in feed.entries[:3]]
+
         kwargs["ti"].xcom_push(key="article_urls", value=urls)
+
 
     fetch_urls_task = PythonOperator(
         task_id="fetch_daily_article_urls",
@@ -125,7 +138,7 @@ with DAG(
             "Generate a podcast script summarizing these MLB headlines:\n"
             f"{formatted_titles}\n"
             "The tone should be informative, engaging, and friendly — like a host doing a daily baseball roundup. "
-            "Include context from the articles where possible and keep it under 500 words."
+            "Include context from the articles where possible."
         )
 
         kwargs["ti"].log.info(f"Auto-generated prompt:\n{prompt}")
@@ -162,7 +175,6 @@ with DAG(
     )
 
     def generate_script_task(**kwargs):
-        #query = "Generate a podcast script about the Guardians and Rockies trade."
         query = kwargs['ti'].xcom_pull(key="podcast_prompt", task_ids="build_query_prompt")
         script = generate_podcast_script(query)
         kwargs['ti'].log.info(f"Generated Podcast Script:\n{script}")

@@ -60,7 +60,9 @@ def embed_and_insert(articles: list, collection, model_name=EMBEDDING_MODEL_NAME
     Embed the article texts using a local SentenceTransformer model
     and insert them into the Chroma collection.
     """
+    print("🗑️ Clearing Chroma DB...")
     collection.delete(where={"id": {"$ne": ""}})
+    print("✅ Cleared. Current count:", len(collection.get()["ids"]))
     model = SentenceTransformer(model_name)
     texts = [art["body"] for art in articles]
     embeddings = model.encode(texts)
@@ -129,13 +131,15 @@ def rag_pipeline(query_str: str) -> str:
     client = OpenAI(api_key=openai_api_key)
     
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",  # or 'gpt-4' if available
+        model="gpt-4",  # or 'gpt-4' if available
         messages=messages,
         temperature=0.7,
         max_tokens=600
     )
     final_answer = response.choices[0].message.content.strip()
     return final_answer
+
+import logging
 
 def generate_podcast_script(query_str: str) -> str:
     """
@@ -144,18 +148,36 @@ def generate_podcast_script(query_str: str) -> str:
     2. Constructs a detailed prompt for the LLM.
     3. Calls the OpenAI API to generate a full podcast script.
     """
+    # Set up logging
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
     # Retrieve relevant documents
     collection = get_chroma_collection()
     embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     query_embedding = embed_model.encode([query_str])[0]
-    results = collection.query(query_embeddings=[query_embedding], n_results=3)
+    results = collection.query(query_embeddings=[query_embedding], n_results=3, include=["documents", "metadatas"])
+
     docs = results["documents"][0] if results["documents"] else []
+    metadatas = results["metadatas"][0] if results["metadatas"] else []
+
     if not docs:
+        logger.warning("No relevant documents found.")
         return "No relevant documents found."
-    
+
+    # Log the retrieved documents and metadata
+    logger.info(f"Query to Chroma: {query_str}")
+    for i, (doc, meta) in enumerate(zip(docs, metadatas)):
+        logger.info(f"\n--- Top Doc #{i + 1} ---")
+        logger.info(f"Title: {meta.get('title', 'N/A')}")
+        logger.info(f"URL: {meta.get('url', 'N/A')}")
+        logger.info(f"Excerpt: {doc[:500]}...\n")
+
     # Combine the retrieved docs into context
     context_text = "\n\n".join(docs)
-    
+    logger.info("=== Final Context Passed to LLM ===")
+    logger.info(context_text[:2000])
+
     # Build a detailed prompt for generating a podcast script
     prompt = (
         "You are an experienced MLB podcast host. Generate a natural, conversational podcast script "
@@ -172,7 +194,7 @@ def generate_podcast_script(query_str: str) -> str:
         f"{context_text}\n\n"
         "Based on this context, generate a complete, natural-sounding podcast script."
     )
-    
+
     # Prepare the message payload for ChatCompletion
     messages = [
         {
@@ -187,21 +209,22 @@ def generate_podcast_script(query_str: str) -> str:
             "content": prompt
         }
     ]
-    
+
     # Instantiate OpenAI client inside the function
     from openai import OpenAI
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
         raise ValueError("Missing OPENAI_API_KEY")
     openai_client = OpenAI(api_key=openai_api_key)
-    
+
     response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        #model="gpt-3.5-turbo",
+        model="gpt-4",
         messages=messages,
         temperature=0.7,
         max_tokens=1500
     )
-    
+
     podcast_script = response.choices[0].message.content.strip()
     return podcast_script
 
