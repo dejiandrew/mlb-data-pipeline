@@ -38,6 +38,7 @@ class NewsTool(BaseTool):
     Input should include topics (comma-separated) and any specific requirements.
     """
     args_schema: Optional[type[BaseModel]] = NewsInput
+    news_agent: NewsGatheringAgent
     
     def __init__(self, news_agent: NewsGatheringAgent):
         """Initialize with a NewsGatheringAgent."""
@@ -61,6 +62,8 @@ class NewsTool(BaseTool):
             results.append(f"HEADLINE: {headline}\nCONTENT: {content}\nSOURCE: {source}")
         
         return "\n\n".join(results)
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class GameStatsInput(BaseModel):
@@ -82,6 +85,7 @@ class GameStatsTool(BaseTool):
     Input should include a focus area and optionally specific teams.
     """
     args_schema: Optional[type[BaseModel]] = GameStatsInput
+    game_agent: GameAnalysisAgent
     
     def __init__(self, game_agent: GameAnalysisAgent):
         """Initialize with a GameAnalysisAgent."""
@@ -106,6 +110,8 @@ class GameStatsTool(BaseTool):
             results.append(f"{section_title}:\n{content}")
         
         return "\n\n".join(results)
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class ScriptEditInput(BaseModel):
@@ -127,6 +133,7 @@ class ScriptEditingTool(BaseTool):
     Input should include the script to edit and any specific requirements.
     """
     args_schema: Optional[type[BaseModel]] = ScriptEditInput
+    script_agent: ScriptEditingAgent
     
     def __init__(self, script_agent: ScriptEditingAgent):
         """Initialize with a ScriptEditingAgent."""
@@ -141,6 +148,8 @@ class ScriptEditingTool(BaseTool):
         )
         
         return edited_script
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class FanReactionInput(BaseModel):
@@ -162,6 +171,7 @@ class FanReactionTool(BaseTool):
     Input should include topics and optionally specific platforms.
     """
     args_schema: Optional[type[BaseModel]] = FanReactionInput
+    fan_agent: FanReactionAgent
     
     def __init__(self, fan_agent: FanReactionAgent):
         """Initialize with a FanReactionAgent."""
@@ -185,6 +195,8 @@ class FanReactionTool(BaseTool):
         formatted = "FAN REACTIONS:\n" + "\n".join([f"- {r}" for r in reactions])
         
         return formatted
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class RAGQueryInput(BaseModel):

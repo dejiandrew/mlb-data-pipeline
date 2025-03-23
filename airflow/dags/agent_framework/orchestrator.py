@@ -246,6 +246,93 @@ class OrchestratorAgent:
             plan["production_notes"] = notes_section
             
         return plan
+    
+    def _get_tool_by_name(self, tool_name: str):
+        """Helper to get a tool by its name."""
+        for tool in self.tools:
+            if tool.name == tool_name:
+                return tool
+        return None
+
+    def _parse_news_tool_output(self, news_text: str) -> List[Dict[str, str]]:
+        """Parse the string output from the news tool into structured data."""
+        news_items = []
+        
+        # Split the text into individual news items
+        items_text = news_text.split("\n\n")
+        
+        for item_text in items_text:
+            if not item_text.strip():
+                continue
+                
+            lines = item_text.split("\n")
+            news_item = {}
+            
+            for line in lines:
+                if line.startswith("HEADLINE:"):
+                    news_item["headline"] = line.replace("HEADLINE:", "").strip()
+                elif line.startswith("CONTENT:"):
+                    news_item["content"] = line.replace("CONTENT:", "").strip()
+                elif line.startswith("SOURCE:"):
+                    news_item["source"] = line.replace("SOURCE:", "").strip()
+                    
+            if news_item:  # Only add if we found at least some data
+                news_items.append(news_item)
+        
+        return news_items
+
+    def _parse_game_tool_output(self, game_text: str) -> Dict[str, str]:
+        """Parse the string output from the game analysis tool into structured data."""
+        game_analysis = {}
+        
+        # Split the text into sections
+        sections = game_text.split("\n\n")
+        
+        for section in sections:
+            if not section.strip():
+                continue
+                
+            # Find the section title (before the first colon)
+            parts = section.split(":", 1)
+            if len(parts) < 2:
+                continue
+                
+            section_title = parts[0].strip().lower().replace(" ", "_")
+            section_content = parts[1].strip()
+            
+            # Add to the analysis dictionary
+            game_analysis[section_title] = section_content
+        
+        return game_analysis
+
+    def _parse_fan_tool_output(self, fan_text: str) -> List[str]:
+        """Parse the string output from the fan reaction tool into structured data."""
+        fan_reactions = []
+        
+        # Check if the text starts with a header line like "FAN REACTIONS:"
+        lines = fan_text.strip().split("\n")
+        start_idx = 0
+        
+        if lines and "FAN REACTIONS:" in lines[0]:
+            start_idx = 1
+        
+        # Process each line that looks like a bullet point
+        for i in range(start_idx, len(lines)):
+            line = lines[i].strip()
+            
+            # Skip empty lines
+            if not line:
+                continue
+                
+            # Remove bullet point markers and add to list
+            if line.startswith("- "):
+                reaction = line[2:].strip()
+                fan_reactions.append(reaction)
+            else:
+                # In case there's no bullet point
+                fan_reactions.append(line)
+        
+        return fan_reactions
         
     def execute_podcast_plan(self, plan: PodcastTaskPlan) -> Dict[str, Any]:
         """
@@ -263,21 +350,36 @@ class OrchestratorAgent:
         for agent_name in plan.specialized_agents_needed:
             logger.info(f"Invoking {agent_name} for podcast production")
             
-            if agent_name == "NewsGatheringAgent":
-                results["news"] = self.news_agent.gather_news(
-                    topics=plan.key_storylines,
-                    requirements=plan.context_requirements.get("NewsGatheringAgent", "")
+        if agent_name == "NewsGatheringAgent":
+            news_tool = self._get_tool_by_name("news_gathering_tool")
+            if news_tool:
+                topics_str = ", ".join(plan.key_storylines)
+                requirements = plan.context_requirements.get("NewsGatheringAgent", "")
+                news_results = news_tool._run(
+                    topics=topics_str,
+                    requirements=requirements
                 )
+                results["news"] = self._parse_news_tool_output(news_results)
+            else:
+                logger.error("News gathering tool not found")
             
-            elif agent_name == "GameAnalysisAgent":
-                results["game_analysis"] = self.game_analysis_agent.analyze_games(
-                    focus=plan.context_requirements.get("GameAnalysisAgent", "")
-                )
-            
-            elif agent_name == "FanReactionAgent":
-                results["fan_reactions"] = self.fan_reaction_agent.gather_reactions(
-                    topics=plan.key_storylines
-                )
+            if agent_name == "GameAnalysisAgent":
+                game_tool = self._get_tool_by_name("game_analysis_tool")
+                if game_tool:
+                    focus = plan.context_requirements.get("GameAnalysisAgent", "recent games")
+                    game_results = game_tool._run(focus=focus)
+                    results["game_analysis"] = self._parse_game_tool_output(game_results)
+                else:
+                    logger.error("Game analysis tool not found")
+
+            if agent_name == "FanReactionAgent":
+                fan_tool = self._get_tool_by_name("fan_reaction_tool")
+                if fan_tool:
+                    topics_str = ", ".join(plan.key_storylines)
+                    fan_results = fan_tool._run(topics=topics_str)
+                    results["fan_reactions"] = self._parse_fan_tool_output(fan_results)
+                else:
+                    logger.error("Fan reaction tool not found")
         
         # Generate initial script based on gathered information
         logger.info("Generating initial podcast script")
@@ -321,14 +423,3 @@ class OrchestratorAgent:
         )
         
         return script
-
-
-
-
-
-
-
-
-
-
-
