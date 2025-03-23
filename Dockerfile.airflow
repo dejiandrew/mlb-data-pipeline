@@ -11,7 +11,11 @@ RUN pip install --no-cache-dir \
     sentence-transformers \
     chromadb \
     python-dotenv \
-    openai
+    openai \
+    langchain \
+    langchain-openai \
+    pydantic \
+    onnxruntime
 
 # (Optional) Switch back to root if needed for later steps
 # USER root
