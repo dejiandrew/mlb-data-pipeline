@@ -41,22 +41,22 @@ with DAG(
 ) as dag:
 
     def fetch_daily_article_urls(**kwargs):
-        import feedparser
-        from datetime import datetime
-
         feed = feedparser.parse("https://www.mlb.com/feeds/news/rss.xml")
+        urls = []
 
-        today_str = datetime.utcnow().strftime("%a, %d %b %Y")  # e.g., "Sun, 23 Mar 2025"
-        urls = [
-            entry.link for entry in feed.entries
-            if entry.published.startswith(today_str)
-        ]
+        for entry in feed.entries:
+            try:
+                published_dt = datetime(*entry.published_parsed[:6])
+                if published_dt.date() == datetime.utcnow().date():
+                    urls.append(entry.link)
+            except Exception as e:
+                print(f"Error parsing entry: {e}")
 
-        # Fallback: if no articles match today’s date, just take the top 3
         if not urls:
             urls = [entry.link for entry in feed.entries[:3]]
 
         kwargs["ti"].xcom_push(key="article_urls", value=urls)
+
 
 
     fetch_urls_task = PythonOperator(
