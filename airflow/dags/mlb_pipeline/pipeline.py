@@ -281,10 +281,14 @@ def format_script_for_tts(script: str) -> str:
     return " ".join(cleaned_lines)
 
 
+import os
+import requests
+
 def generate_audio_with_your_voice(script_text, output_file="podcast_output.mp3"):
     """Generate audio using your cloned voice on ElevenLabs"""
     voice_id = os.getenv("ELEVENLABS_VOICE_ID")
     api_key = os.getenv("ELEVENLABS_API_KEY")
+    model_id = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")  # Use env var or fallback
     
     if not voice_id or not api_key:
         raise ValueError("Missing ELEVENLABS_VOICE_ID or ELEVENLABS_API_KEY in environment variables")
@@ -296,14 +300,13 @@ def generate_audio_with_your_voice(script_text, output_file="podcast_output.mp3"
         "Content-Type": "application/json"
     }
     
-    # Adjust these settings for a more natural sound
     data = {
         "text": script_text,
-        "model_id": "eleven_monolingual_v1",
+        "model_id": model_id,
         "voice_settings": {
-            "stability": 0.6,           # Increased slightly for more consistency
-            "similarity_boost": 0.8,     # Increased to sound more like your voice
-            "style": 0.25,              # Add a bit of style variation
+            "stability": 0.6,
+            "similarity_boost": 0.8,
+            "style": 0.25,
             "use_speaker_boost": True
         }
     }
@@ -314,10 +317,10 @@ def generate_audio_with_your_voice(script_text, output_file="podcast_output.mp3"
     if response.status_code == 200:
         with open(output_file, 'wb') as f:
             f.write(response.content)
-        print(f"Audio generated successfully: {output_file}")
+        print(f"✅ Audio generated: {output_file}")
         return output_file
     else:
-        print(f"Error generating audio: {response.status_code}")
+        print(f"❌ Error generating audio: {response.status_code}")
         print(response.text)
         return None
 

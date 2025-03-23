@@ -67,45 +67,21 @@ with DAG(
     )
 
 
-    def scrape_and_store(**kwargs):
-        from mlb_pipeline.pipeline import scrape_article, store_in_gcs
-        import time
-        import os
-        from datetime import datetime
-
-        # Pull URLs from the previous task
-        article_urls = kwargs["ti"].xcom_pull(
-            key="article_urls", task_ids="fetch_daily_article_urls"
-        )
-
-        if not article_urls:
-            kwargs["ti"].log.warning("No article URLs found to scrape.")
-            return
-
-        scraped_data = []
-        for url in article_urls:
-            kwargs["ti"].log.info(f"Scraping: {url}")
-            try:
-                article = scrape_article(url)
-                scraped_data.append(article)
-                time.sleep(2)
-            except Exception as e:
-                kwargs["ti"].log.error(f"Error scraping {url}: {e}")
-
-        # Store scraped data to GCS
-        blob_name = f"articles/{datetime.now().strftime('%Y-%m-%d')}/articles_batch.json"
-        store_in_gcs(scraped_data, os.getenv("GCS_BUCKET_NAME"), blob_name)
-
-        # Push scraped data forward for other tasks
-        kwargs["ti"].xcom_push(key="scraped_data", value=scraped_data)
-
     # def scrape_and_store(**kwargs):
-    #     article_urls = [
-    #         #"https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
-    #         #"https://www.mlb.com/news/spencer-strider-makes-first-2025-spring-training-start-after-surgery",
-    #         "https://www.mlb.com/news/guardians-acquire-nolan-jones-from-rockies-for-tyler-freeman",
-    #         # Add more URLs as needed
-    #     ]
+    #     from mlb_pipeline.pipeline import scrape_article, store_in_gcs
+    #     import time
+    #     import os
+    #     from datetime import datetime
+
+    #     # Pull URLs from the previous task
+    #     article_urls = kwargs["ti"].xcom_pull(
+    #         key="article_urls", task_ids="fetch_daily_article_urls"
+    #     )
+
+    #     if not article_urls:
+    #         kwargs["ti"].log.warning("No article URLs found to scrape.")
+    #         return
+
     #     scraped_data = []
     #     for url in article_urls:
     #         kwargs["ti"].log.info(f"Scraping: {url}")
@@ -115,9 +91,33 @@ with DAG(
     #             time.sleep(2)
     #         except Exception as e:
     #             kwargs["ti"].log.error(f"Error scraping {url}: {e}")
+
+    #     # Store scraped data to GCS
     #     blob_name = f"articles/{datetime.now().strftime('%Y-%m-%d')}/articles_batch.json"
     #     store_in_gcs(scraped_data, os.getenv("GCS_BUCKET_NAME"), blob_name)
+
+    #     # Push scraped data forward for other tasks
     #     kwargs["ti"].xcom_push(key="scraped_data", value=scraped_data)
+
+    def scrape_and_store(**kwargs):
+        article_urls = [
+            #"https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
+            #"https://www.mlb.com/news/spencer-strider-makes-first-2025-spring-training-start-after-surgery",
+            "https://www.mlb.com/news/guardians-acquire-nolan-jones-from-rockies-for-tyler-freeman",
+            # Add more URLs as needed
+        ]
+        scraped_data = []
+        for url in article_urls:
+            kwargs["ti"].log.info(f"Scraping: {url}")
+            try:
+                article = scrape_article(url)
+                scraped_data.append(article)
+                time.sleep(2)
+            except Exception as e:
+                kwargs["ti"].log.error(f"Error scraping {url}: {e}")
+        blob_name = f"articles/{datetime.now().strftime('%Y-%m-%d')}/articles_batch.json"
+        store_in_gcs(scraped_data, os.getenv("GCS_BUCKET_NAME"), blob_name)
+        kwargs["ti"].xcom_push(key="scraped_data", value=scraped_data)
 
     scrape_and_store_task = PythonOperator(
         task_id="scrape_and_store",
