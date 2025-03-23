@@ -39,6 +39,9 @@ class NewsTool(BaseTool):
     """
     args_schema: Optional[type[BaseModel]] = NewsInput
     news_agent: NewsGatheringAgent
+
+    class Config:
+        arbitrary_types_allowed = True
     
     def __init__(self, news_agent: NewsGatheringAgent):
         """Initialize with a NewsGatheringAgent."""
@@ -62,9 +65,10 @@ class NewsTool(BaseTool):
             results.append(f"HEADLINE: {headline}\nCONTENT: {content}\nSOURCE: {source}")
         
         return "\n\n".join(results)
-    class Config:
-        arbitrary_types_allowed = True
-
+    
+    def __init__(self, news_agent: NewsGatheringAgent, **kwargs):
+            """Override init and forward all args to BaseTool via kwargs."""
+            super().__init__(news_agent=news_agent, **kwargs)
 
 class GameStatsInput(BaseModel):
     """Input for the game analysis tool."""
@@ -86,6 +90,9 @@ class GameStatsTool(BaseTool):
     """
     args_schema: Optional[type[BaseModel]] = GameStatsInput
     game_agent: GameAnalysisAgent
+
+    class Config:
+        arbitrary_types_allowed = True
     
     def __init__(self, game_agent: GameAnalysisAgent):
         """Initialize with a GameAnalysisAgent."""
@@ -110,8 +117,11 @@ class GameStatsTool(BaseTool):
             results.append(f"{section_title}:\n{content}")
         
         return "\n\n".join(results)
-    class Config:
-        arbitrary_types_allowed = True
+    
+    def __init__(self, game_agent: GameAnalysisAgent, **kwargs):
+            """Override init and forward all args to BaseTool via kwargs."""
+            super().__init__(game_agent=game_agent, **kwargs)
+    
 
 
 class ScriptEditInput(BaseModel):
@@ -134,6 +144,9 @@ class ScriptEditingTool(BaseTool):
     """
     args_schema: Optional[type[BaseModel]] = ScriptEditInput
     script_agent: ScriptEditingAgent
+
+    class Config:
+        arbitrary_types_allowed = True
     
     def __init__(self, script_agent: ScriptEditingAgent):
         """Initialize with a ScriptEditingAgent."""
@@ -148,8 +161,10 @@ class ScriptEditingTool(BaseTool):
         )
         
         return edited_script
-    class Config:
-        arbitrary_types_allowed = True
+
+    def __init__(self, script_agent: ScriptEditingAgent, **kwargs):
+            """Override init and forward all args to BaseTool via kwargs."""
+            super().__init__(script_agent=script_agent, **kwargs)
 
 
 class FanReactionInput(BaseModel):
@@ -172,6 +187,9 @@ class FanReactionTool(BaseTool):
     """
     args_schema: Optional[type[BaseModel]] = FanReactionInput
     fan_agent: FanReactionAgent
+
+    class Config:
+        arbitrary_types_allowed = True
     
     def __init__(self, fan_agent: FanReactionAgent):
         """Initialize with a FanReactionAgent."""
@@ -195,8 +213,9 @@ class FanReactionTool(BaseTool):
         formatted = "FAN REACTIONS:\n" + "\n".join([f"- {r}" for r in reactions])
         
         return formatted
-    class Config:
-        arbitrary_types_allowed = True
+    def __init__(self, fan_agent: FanReactionAgent, **kwargs):
+            """Override init and forward all args to BaseTool via kwargs."""
+            super().__init__(fan_agent=fan_agent, **kwargs)
 
 
 class RAGQueryInput(BaseModel):

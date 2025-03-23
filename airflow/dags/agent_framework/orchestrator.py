@@ -350,36 +350,36 @@ class OrchestratorAgent:
         for agent_name in plan.specialized_agents_needed:
             logger.info(f"Invoking {agent_name} for podcast production")
             
-        if agent_name == "NewsGatheringAgent":
-            news_tool = self._get_tool_by_name("news_gathering_tool")
-            if news_tool:
-                topics_str = ", ".join(plan.key_storylines)
-                requirements = plan.context_requirements.get("NewsGatheringAgent", "")
-                news_results = news_tool._run(
-                    topics=topics_str,
-                    requirements=requirements
-                )
-                results["news"] = self._parse_news_tool_output(news_results)
-            else:
-                logger.error("News gathering tool not found")
-            
-            if agent_name == "GameAnalysisAgent":
-                game_tool = self._get_tool_by_name("game_analysis_tool")
-                if game_tool:
-                    focus = plan.context_requirements.get("GameAnalysisAgent", "recent games")
-                    game_results = game_tool._run(focus=focus)
-                    results["game_analysis"] = self._parse_game_tool_output(game_results)
-                else:
-                    logger.error("Game analysis tool not found")
-
-            if agent_name == "FanReactionAgent":
-                fan_tool = self._get_tool_by_name("fan_reaction_tool")
-                if fan_tool:
+            if agent_name == "NewsGatheringAgent":
+                news_tool = self._get_tool_by_name("news_gathering_tool")
+                if news_tool:
                     topics_str = ", ".join(plan.key_storylines)
-                    fan_results = fan_tool._run(topics=topics_str)
-                    results["fan_reactions"] = self._parse_fan_tool_output(fan_results)
+                    requirements = plan.context_requirements.get("NewsGatheringAgent", "")
+                    news_results = news_tool._run(
+                        topics=topics_str,
+                        requirements=requirements
+                    )
+                    results["news"] = self._parse_news_tool_output(news_results)
                 else:
-                    logger.error("Fan reaction tool not found")
+                    logger.error("News gathering tool not found")
+                
+                if agent_name == "GameAnalysisAgent":
+                    game_tool = self._get_tool_by_name("game_analysis_tool")
+                    if game_tool:
+                        focus = plan.context_requirements.get("GameAnalysisAgent", "recent games")
+                        game_results = game_tool._run(focus=focus)
+                        results["game_analysis"] = self._parse_game_tool_output(game_results)
+                    else:
+                        logger.error("Game analysis tool not found")
+
+                if agent_name == "FanReactionAgent":
+                    fan_tool = self._get_tool_by_name("fan_reaction_tool")
+                    if fan_tool:
+                        topics_str = ", ".join(plan.key_storylines)
+                        fan_results = fan_tool._run(topics=topics_str)
+                        results["fan_reactions"] = self._parse_fan_tool_output(fan_results)
+                    else:
+                        logger.error("Fan reaction tool not found")
         
         # Generate initial script based on gathered information
         logger.info("Generating initial podcast script")

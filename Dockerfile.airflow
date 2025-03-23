@@ -15,7 +15,9 @@ RUN pip install --no-cache-dir \
     langchain \
     langchain-openai \
     pydantic \
-    onnxruntime
+    onnxruntime \
+    beautifulsoup4 \
+    feedparser
 
 # (Optional) Switch back to root if needed for later steps
 # USER root

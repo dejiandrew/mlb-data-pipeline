@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
 import os
 import time
+import requests
+from bs4 import BeautifulSoup
 import sys
 sys.path.append('/opt/airflow')
-from agent_framework.orchestrator import OrchestratorAgent
-from agent_framework.utils import save_json, format_plan_as_markdown
+#from agent_framework.orchestrator import OrchestratorAgent
+from agent_framework.utils import save_json #, format_plan_as_markdown
 
 from dotenv import load_dotenv
 
@@ -17,19 +19,19 @@ from airflow.operators.bash_operator import BashOperator
 from airflow.utils.dates import days_ago
 
 # Import functions from your module
-from mlb_pipeline.pipeline import (
-    scrape_article,
-    store_in_gcs,
-    get_chroma_collection,
-    embed_and_insert,
-    format_script_for_tts,
-    generate_audio_with_your_voice,
-    upload_podcast_to_gcs
-)
+# from mlb_pipeline.pipeline import (
+#     #scrape_article,
+#     #store_in_gcs,
+#     #get_chroma_collection,
+#     #embed_and_insert,
+#     #format_script_for_tts,
+#     #generate_audio_with_your_voice,
+#     #upload_podcast_to_gcs
+# )
 
 # Import agent framework components
-from agent_framework.orchestrator import OrchestratorAgent
-from agent_framework.utils import save_json, format_plan_as_markdown
+#from agent_framework.orchestrator import OrchestratorAgent
+#from agent_framework.utils import save_json, format_plan_as_markdown
 
 default_args = {
     "owner": "airflow",
@@ -46,14 +48,37 @@ with DAG(
     catchup=False,
 ) as dag:
 
+    def get_latest_articles_from_rss(limit: int = 5) -> list[str]:
+        import xml.etree.ElementTree as ET
+        """
+        Pulls latest article URLs from MLB.com RSS feed.
+        """
+        rss_url = "https://www.mlb.com/feeds/news/rss.xml"
+        response = requests.get(rss_url)
+        response.raise_for_status()
+
+        root = ET.fromstring(response.content)
+        items = root.findall("./channel/item")
+
+        article_urls = []
+        for item in items[:limit]:
+            link = item.find("link").text
+            if link:
+                article_urls.append(link)
+
+        return article_urls
+
+
     def scrape_and_store(**kwargs):
+        from mlb_pipeline.pipeline import scrape_article, store_in_gcs
         """Scrape MLB articles and store them in GCS."""
         article_urls = [
-            "https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
-            "https://www.mlb.com/news/mlb-2025-bbwaa-award-winners-predictions",
-            "https://www.mlb.com/news/aaron-judge-hits-first-spring-training-home-run",
-            # Add more URLs as needed
+        "https://www.mlb.com/news/mlb-2025-bbwaa-award-winners-predictions",
+        "https://www.mlb.com/news/aaron-judge-hits-first-spring-training-home-run",
+        "https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
+        
         ]
+
         scraped_data = []
         for url in article_urls:
             kwargs["ti"].log.info(f"Scraping: {url}")
@@ -77,6 +102,7 @@ with DAG(
     )
 
     def embed_update_vector_db(**kwargs):
+        from mlb_pipeline.pipeline import get_chroma_collection, embed_and_insert
         """Embed articles and update the vector database."""
         scraped_data = kwargs["ti"].xcom_pull(key="scraped_data", task_ids="scrape_and_store")
         collection = get_chroma_collection()
@@ -89,36 +115,33 @@ with DAG(
     )
 
     def create_podcast_plan(**kwargs):
-        """Create a podcast plan using the orchestrator agent."""
+        from agent_framework.orchestrator import OrchestratorAgent
+        from agent_framework.utils import format_plan_as_markdown
+
         openai_api_key = os.getenv("OPENAI_API_KEY")
         if not openai_api_key:
             raise ValueError("Missing OPENAI_API_KEY in environment variables")
-        
-        # Get scraped article titles for potential topics
+
+        # You can still pull scraped data if needed
         scraped_data = kwargs["ti"].xcom_pull(key="scraped_data", task_ids="scrape_and_store")
-        article_topics = [article.get('title', 'MLB News') for article in scraped_data]
-        
-        # Join the first few topics for context
-        topic_context = ", ".join(article_topics[:3]) if article_topics else "MLB trending topics"
-        
-        # Initialize the orchestrator agent
+
+        # Instead of generating a context, hardcode a focused topic
+        custom_topic = "Spring training storylines: Judge's power, BBWAA predictions, and 2025 Opening Day power rankings"
+
         kwargs["ti"].log.info("Initializing orchestrator agent")
         orchestrator = OrchestratorAgent(openai_api_key=openai_api_key)
-        
-        # Create a podcast plan
-        kwargs["ti"].log.info(f"Creating podcast plan based on recent articles")
+
+        kwargs["ti"].log.info("Creating podcast plan with custom topic")
         plan = orchestrator.create_podcast_plan(
-            topic=f"Recent MLB developments including {topic_context}",
-            special_focus="important team updates and player performances"
+            topic=custom_topic,
+            special_focus="insightful narrative around key preseason developments"
         )
-        
-        # Save the plan details
+
         kwargs["ti"].xcom_push(key="podcast_plan", value=plan.dict())
-        
-        # Log the plan for visibility
+
         plan_md = format_plan_as_markdown(plan.dict())
         kwargs["ti"].log.info(f"Podcast Plan:\n{plan_md}")
-        
+
         return plan.dict()
 
     create_plan_task = PythonOperator(
@@ -128,6 +151,7 @@ with DAG(
     )
 
     def execute_podcast_plan(**kwargs):
+        from agent_framework.orchestrator import OrchestratorAgent, PodcastTaskPlan
         """Execute the podcast plan created by the orchestrator agent."""
         # Retrieve the podcast plan
         plan_dict = kwargs["ti"].xcom_pull(key="podcast_plan", task_ids="create_podcast_plan")
@@ -166,6 +190,7 @@ with DAG(
     )
 
     def generate_audio_task(**kwargs):
+        from mlb_pipeline.pipeline import format_script_for_tts, generate_audio_with_your_voice
         """Generate audio from the podcast script."""
         # Get the script from XCom
         script = kwargs['ti'].xcom_pull(key="podcast_script", task_ids="execute_podcast_plan")
@@ -216,6 +241,7 @@ with DAG(
     )
 
     def upload_to_gcs_task(**kwargs):
+        from mlb_pipeline.pipeline import upload_podcast_to_gcs
         """Upload generated podcast files to GCS."""
         audio_file = kwargs['ti'].xcom_pull(key="audio_file", task_ids="generate_audio")
         script_file = kwargs['ti'].xcom_pull(key="script_file", task_ids="generate_audio")
@@ -253,6 +279,8 @@ with DAG(
 
     # Create a task for monitoring and collecting feedback
     def collect_feedback(**kwargs):
+        from mlb_pipeline.pipeline import upload_podcast_to_gcs
+
         """Placeholder for a feedback collection system."""
         # In a real implementation, this would integrate with your monitoring system
         # to collect feedback on the podcast and store it for future improvements
@@ -287,6 +315,13 @@ with DAG(
             json.dump(podcast_info, f, indent=2)
             
         kwargs['ti'].log.info(f"Saved feedback data to {feedback_file}")
+
+        bucket_name = os.getenv("GCS_BUCKET_NAME")
+        blob_name = f"feedback/{os.path.basename(feedback_file)}"
+
+        upload_podcast_to_gcs(feedback_file, bucket_name, blob_name)
+        kwargs["ti"].log.info(f"Uploaded feedback to GCS: gs://{bucket_name}/{blob_name}")
+
         return feedback_file
 
     collect_feedback_task = PythonOperator(

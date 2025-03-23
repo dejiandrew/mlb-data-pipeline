@@ -40,12 +40,34 @@ with DAG(
     catchup=False,
 ) as dag:
 
+    def fetch_daily_article_urls(**kwargs):
+        import feedparser
+        feed = feedparser.parse("https://www.mlb.com/feeds/news/rss.xml")
+        urls = [entry.link for entry in feed.entries[:3]]  # or filter by keyword/date
+        kwargs["ti"].xcom_push(key="article_urls", value=urls)
+
+    fetch_urls_task = PythonOperator(
+        task_id="fetch_daily_article_urls",
+        python_callable=fetch_daily_article_urls,
+        provide_context=True,
+    )
+
+
     def scrape_and_store(**kwargs):
-        article_urls = [
-            #"https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
-            "https://www.mlb.com/news/spencer-strider-makes-first-2025-spring-training-start-after-surgery"
-            # Add more URLs as needed
-        ]
+        from mlb_pipeline.pipeline import scrape_article, store_in_gcs
+        import time
+        import os
+        from datetime import datetime
+
+        # Pull URLs from the previous task
+        article_urls = kwargs["ti"].xcom_pull(
+            key="article_urls", task_ids="fetch_daily_article_urls"
+        )
+
+        if not article_urls:
+            kwargs["ti"].log.warning("No article URLs found to scrape.")
+            return
+
         scraped_data = []
         for url in article_urls:
             kwargs["ti"].log.info(f"Scraping: {url}")
@@ -55,15 +77,67 @@ with DAG(
                 time.sleep(2)
             except Exception as e:
                 kwargs["ti"].log.error(f"Error scraping {url}: {e}")
+
+        # Store scraped data to GCS
         blob_name = f"articles/{datetime.now().strftime('%Y-%m-%d')}/articles_batch.json"
         store_in_gcs(scraped_data, os.getenv("GCS_BUCKET_NAME"), blob_name)
+
+        # Push scraped data forward for other tasks
         kwargs["ti"].xcom_push(key="scraped_data", value=scraped_data)
+
+    # def scrape_and_store(**kwargs):
+    #     article_urls = [
+    #         #"https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
+    #         #"https://www.mlb.com/news/spencer-strider-makes-first-2025-spring-training-start-after-surgery",
+    #         "https://www.mlb.com/news/guardians-acquire-nolan-jones-from-rockies-for-tyler-freeman",
+    #         # Add more URLs as needed
+    #     ]
+    #     scraped_data = []
+    #     for url in article_urls:
+    #         kwargs["ti"].log.info(f"Scraping: {url}")
+    #         try:
+    #             article = scrape_article(url)
+    #             scraped_data.append(article)
+    #             time.sleep(2)
+    #         except Exception as e:
+    #             kwargs["ti"].log.error(f"Error scraping {url}: {e}")
+    #     blob_name = f"articles/{datetime.now().strftime('%Y-%m-%d')}/articles_batch.json"
+    #     store_in_gcs(scraped_data, os.getenv("GCS_BUCKET_NAME"), blob_name)
+    #     kwargs["ti"].xcom_push(key="scraped_data", value=scraped_data)
 
     scrape_and_store_task = PythonOperator(
         task_id="scrape_and_store",
         python_callable=scrape_and_store,
         provide_context=True,
     )
+
+    def build_query_prompt(**kwargs):
+        scraped_data = kwargs["ti"].xcom_pull(key="scraped_data", task_ids="scrape_and_store")
+
+        if not scraped_data:
+            kwargs["ti"].log.warning("No scraped data found for prompt generation.")
+            return
+
+        titles = [article.get("title", "MLB Update") for article in scraped_data]
+        formatted_titles = "; ".join(titles)
+
+        prompt = (
+            "Generate a podcast script summarizing these MLB headlines:\n"
+            f"{formatted_titles}\n"
+            "The tone should be informative, engaging, and friendly — like a host doing a daily baseball roundup. "
+            "Include context from the articles where possible and keep it under 500 words."
+        )
+
+        kwargs["ti"].log.info(f"Auto-generated prompt:\n{prompt}")
+        kwargs["ti"].xcom_push(key="podcast_prompt", value=prompt)
+    
+    build_prompt_task = PythonOperator(
+        task_id="build_query_prompt",
+        python_callable=build_query_prompt,
+        provide_context=True,
+    )
+
+
 
     def embed_update_vector_db(**kwargs):
         scraped_data = kwargs["ti"].xcom_pull(key="scraped_data", task_ids="scrape_and_store")
@@ -88,7 +162,8 @@ with DAG(
     )
 
     def generate_script_task(**kwargs):
-        query = "Generate a podcast script about the Spencer Strider's first start back from surgery."
+        #query = "Generate a podcast script about the Guardians and Rockies trade."
+        query = kwargs['ti'].xcom_pull(key="podcast_prompt", task_ids="build_query_prompt")
         script = generate_podcast_script(query)
         kwargs['ti'].log.info(f"Generated Podcast Script:\n{script}")
         kwargs['ti'].xcom_push(key="podcast_script", value=script)
@@ -195,4 +270,6 @@ with DAG(
     )
     
     # Set task dependencies
-    scrape_and_store_task >> embed_update_task >> rag_query_task >> generate_script >> generate_audio >> upload_to_gcs_task
+    #scrape_and_store_task >> embed_update_task >> rag_query_task >> generate_script >> generate_audio >> upload_to_gcs_task
+    #scrape_and_store_task >> embed_update_task >> generate_script >> generate_audio >> upload_to_gcs_task
+    fetch_urls_task >> scrape_and_store_task >> build_prompt_task >> embed_update_task >> generate_script >> generate_audio >> upload_to_gcs_task

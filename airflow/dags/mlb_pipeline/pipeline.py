@@ -24,6 +24,7 @@ from chromadb.config import Settings
 def scrape_article(url: str) -> dict:
     """Scrape an article from a given URL."""
     resp = requests.get(url)
+    resp.encoding = 'utf-8'
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
     title_tag = soup.find("h1")
@@ -59,6 +60,7 @@ def embed_and_insert(articles: list, collection, model_name=EMBEDDING_MODEL_NAME
     Embed the article texts using a local SentenceTransformer model
     and insert them into the Chroma collection.
     """
+    collection.delete(where={"id": {"$ne": ""}})
     model = SentenceTransformer(model_name)
     texts = [art["body"] for art in articles]
     embeddings = model.encode(texts)
@@ -203,42 +205,58 @@ def generate_podcast_script(query_str: str) -> str:
     podcast_script = response.choices[0].message.content.strip()
     return podcast_script
 
-def format_script_for_tts(script):
-    """Format a script for better text-to-speech results"""
-    # Remove any remaining section headers or speaker indicators
-    formatted = re.sub(r'\[(.*?)\]', '', script)
-    formatted = re.sub(r'Host:', '', formatted)
+# def format_script_for_tts(script):
+#     """Format a script for better text-to-speech results"""
+#     # Remove any remaining section headers or speaker indicators
+#     formatted = re.sub(r'\[(.*?)\]', '', script)
+#     formatted = re.sub(r'Host:', '', formatted)
     
-    # Replace common baseball abbreviations and terms
-    replacements = {
-        "MLB": "M L B",
-        "HR": "home run",
-        "RBI": "R B I",
-        "ERA": "E R A",
-        "AL": "A L",
-        "NL": "N L",
-        "vs.": "versus",
-        "vs": "versus",
-        "Phillies": "Fillies",  # Help with pronunciation
-    }
+#     # Replace common baseball abbreviations and terms
+#     replacements = {
+#         "MLB": "M L B",
+#         "HR": "home run",
+#         "RBI": "R B I",
+#         "ERA": "E R A",
+#         "AL": "A L",
+#         "NL": "N L",
+#         "vs.": "versus",
+#         "vs": "versus",
+#         "Phillies": "Fillies",  # Help with pronunciation
+#     }
     
-    for term, replacement in replacements.items():
-        formatted = formatted.replace(f" {term} ", f" {replacement} ")
-        # Also catch terms at the beginning of sentences
-        formatted = formatted.replace(f"{term} ", f"{replacement} ")
+#     for term, replacement in replacements.items():
+#         formatted = formatted.replace(f" {term} ", f" {replacement} ")
+#         # Also catch terms at the beginning of sentences
+#         formatted = formatted.replace(f"{term} ", f"{replacement} ")
     
-    # Match ordinal numbers (1st, 2nd, 3rd, etc.)
-    formatted = re.sub(r'(\d+)(st|nd|rd|th)', r'\1 \2', formatted)
+#     # Match ordinal numbers (1st, 2nd, 3rd, etc.)
+#     formatted = re.sub(r'(\d+)(st|nd|rd|th)', r'\1 \2', formatted)
     
-    # Add subtle pauses after sentences using actual pauses instead of [break]
-    formatted = formatted.replace(". ", ". ... ")
-    formatted = formatted.replace("! ", "! ... ")
-    formatted = formatted.replace("? ", "? ... ")
+#     # Add subtle pauses after sentences using actual pauses instead of [break]
+#     formatted = formatted.replace(". ", ". ... ")
+#     formatted = formatted.replace("! ", "! ... ")
+#     formatted = formatted.replace("? ", "? ... ")
     
-    # Handle paragraph breaks with pauses
-    formatted = formatted.replace("\n\n", "\n...\n")
+#     # Handle paragraph breaks with pauses
+#     formatted = formatted.replace("\n\n", "\n...\n")
     
-    return formatted
+#     return formatted
+
+def format_script_for_tts(script: str) -> str:
+    """
+    Clean and optimize the podcast script for text-to-speech.
+    Removes markdown, excess whitespace, or formatting symbols like '****'
+    """
+    # Remove lines that are just asterisks or other formatting
+    cleaned_lines = []
+    for line in script.splitlines():
+        stripped = line.strip()
+        if re.fullmatch(r"[*\-_=]{3,}", stripped):
+            continue  # skip lines with only *** or --- or ___
+        cleaned_lines.append(stripped)
+
+    return " ".join(cleaned_lines)
+
 
 def generate_audio_with_your_voice(script_text, output_file="podcast_output.mp3"):
     """Generate audio using your cloned voice on ElevenLabs"""
