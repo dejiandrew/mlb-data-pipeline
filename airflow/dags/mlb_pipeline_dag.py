@@ -103,7 +103,8 @@ with DAG(
         article_urls = [
             #"https://www.mlb.com/news/mlb-power-rankings-before-opening-day-2025",
             #"https://www.mlb.com/news/spencer-strider-makes-first-2025-spring-training-start-after-surgery",
-            "https://www.mlb.com/news/guardians-acquire-nolan-jones-from-rockies-for-tyler-freeman",
+            #"https://www.mlb.com/news/guardians-acquire-nolan-jones-from-rockies-for-tyler-freeman",
+            "https://www.mlb.com/news/jurickson-profar-suspended-peds",
             # Add more URLs as needed
         ]
         scraped_data = []
